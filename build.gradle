@@ -3,6 +3,7 @@ import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
 plugins {
     id 'java'
     id("xyz.jpenilla.run-paper") version "2.3.1"
+    id "io.github.goooler.shadow" version "8.1.8"
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.14"
 }
 
@@ -48,6 +49,15 @@ tasks.withType(JavaCompile).configureEach {
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)
     }
+}
+
+shadowJar {
+    destinationDirectory.set(file("../Nations/testserver/plugins"))
+    archiveClassifier.set('all')
+}
+
+tasks.build {
+    dependsOn tasks.shadowJar
 }
 
 processResources {
