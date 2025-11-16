@@ -1,0 +1,4 @@
+name: TerraRenderer
+version: '1.0-SNAPSHOT'
+main: de.terranova.terraRenderer.TerraRenderer
+api-version: '1.21'
