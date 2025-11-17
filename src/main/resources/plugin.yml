@@ -1,4 +1,11 @@
 name: TerraRenderer
-version: '1.0-SNAPSHOT'
 main: de.terranova.terraRenderer.TerraRenderer
-api-version: '1.21'
+version: ${version}
+api-version: "1.21"
+
+commands:
+  debug:
+    description: Debug info + spawn display above looked-at block
+    usage: /debug
+    permission: terrarenderer.debug
+    permission-message: "You don't have permission to use this command."
