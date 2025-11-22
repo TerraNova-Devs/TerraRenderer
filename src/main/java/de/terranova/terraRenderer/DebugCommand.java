@@ -34,6 +34,7 @@ public class DebugCommand implements CommandExecutor {
                 .scale(scale)
                 .rotationEulerDeg(new Vector3f(0f,0f,0f))
                 .material(Material.LIGHT_BLUE_CONCRETE)
+                .onClick((ctx) -> ctx.player().sendMessage("Du Stinkst"))
                 .glow(0x020202);
         node.spawn(List.of(p));
 

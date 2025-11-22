@@ -5,56 +5,68 @@ import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 import java.util.Collection;
 import java.util.Collections;
 
+/**
+ * Utility for spawning and removing NMS entities via packets only
+ * (entities are NOT added to the world).
+ */
 public final class DisplayPackets {
 
     private DisplayPackets() {}
 
-    public static void spawn(Display.BlockDisplay entity, Collection<Player> players) {
-        if (entity == null || players == null || players.isEmpty()) return;
+    /**
+     * Sends spawn + metadata packets for a given NMS entity to the given players.
+     * The entity is NOT registered in the world – this is purely packet-based.
+     */
+    public static void spawn(Entity nmsEntity, Collection<Player> players) {
+        if (nmsEntity == null || players == null || players.isEmpty()) return;
 
-        ServerLevel nmsWorld = (ServerLevel) entity.level();
+        ServerLevel nmsWorld = (ServerLevel) nmsEntity.level();
 
         ServerEntity serverEntity = new ServerEntity(
                 nmsWorld,
-                entity,
+                nmsEntity,
                 0,
                 false,
                 packet -> {},
                 Collections.emptySet()
         );
 
-        Packet<?> spawnPacket = entity.getAddEntityPacket(serverEntity);
-        var dataItems = entity.getEntityData().packAll();
-        ClientboundSetEntityDataPacket dataPacket =
-                new ClientboundSetEntityDataPacket(entity.getId(), dataItems);
+        Packet<?> spawnPacket = nmsEntity.getAddEntityPacket(serverEntity);
 
-        sendToPlayers(players, spawnPacket, dataPacket);
+        var dataItems = nmsEntity.getEntityData().packAll();
+        ClientboundSetEntityDataPacket dataPacket =
+                new ClientboundSetEntityDataPacket(nmsEntity.getId(), dataItems);
+
+        for (Player p : players) {
+            if (p == null || !p.isOnline()) continue;
+
+            var handle = ((CraftPlayer) p).getHandle();
+            handle.connection.send(spawnPacket);
+            handle.connection.send(dataPacket);
+        }
     }
 
+    /**
+     * Sends a remove-entity packet for the given id to the given players.
+     */
     public static void remove(int entityId, Collection<Player> players) {
         if (players == null || players.isEmpty()) return;
 
         ClientboundRemoveEntitiesPacket removePacket =
                 new ClientboundRemoveEntitiesPacket(entityId);
 
-        sendToPlayers(players, removePacket);
-    }
+        for (Player p : players) {
+            if (p == null || !p.isOnline()) continue;
 
-    private static void sendToPlayers(Collection<Player> players, Packet<?>... packets) {
-        for (Player player : players) {
-            if (player == null || !player.isOnline()) continue;
-
-            var handle = ((CraftPlayer) player).getHandle();
-            for (Packet<?> packet : packets) {
-                handle.connection.send(packet);
-            }
+            var handle = ((CraftPlayer) p).getHandle();
+            handle.connection.send(removePacket);
         }
     }
 }

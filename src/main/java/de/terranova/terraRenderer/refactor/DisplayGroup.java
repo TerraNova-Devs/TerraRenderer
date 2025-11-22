@@ -61,7 +61,7 @@ public class DisplayGroup {
 
     public int getPrimaryEntityId() {
         if (nodes.isEmpty()) return -1;
-        return nodes.get(0).getEntityId();
+        return nodes.get(0).getDisplayEntityId();
     }
 
     protected void applyAnchorIfNeeded() {

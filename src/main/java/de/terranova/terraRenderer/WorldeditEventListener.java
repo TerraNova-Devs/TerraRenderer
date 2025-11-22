@@ -222,6 +222,6 @@ public class WorldeditEventListener implements Listener {
         }
 
         node.spawn(viewers);
-        return node.getEntityId();
+        return node.getDisplayEntityId();
     }
 }
