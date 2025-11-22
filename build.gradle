@@ -16,6 +16,10 @@ repositories {
         name = "papermc-repo"
         url = "https://repo.papermc.io/repository/maven-public/"
     }
+    maven {
+        name = "WorldGuard"
+        url = uri("https://maven.enginehub.org/repo/")
+    }
 }
 
 paperweight {
@@ -25,6 +29,7 @@ paperweight {
 
 dependencies {
     paperweight.paperDevBundle("1.21.4-R0.1-SNAPSHOT")
+    compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.13")
 }
 
 tasks {
