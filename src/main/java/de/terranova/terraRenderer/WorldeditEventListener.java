@@ -145,7 +145,7 @@ public class WorldeditEventListener implements Listener {
         // === Wireframe selection cube ===
         // DisplayCube is implemented as 12 line segments (BlockDisplays).
         Material lineMat = Material.WHITE_CONCRETE; // invisible; change to GLASS etc. if you want visible edges
-        Color lineGlow = Color.AQUA;
+        int lineGlow = 0x22CCDD;
         float lineThickness = 0.10f;
 
         Location cubeFrom = new Location(world, xMin, yMin, zMin);

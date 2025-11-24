@@ -4,7 +4,7 @@ import com.mojang.math.Transformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.Interaction;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,8 +21,9 @@ import java.util.function.Consumer;
 
 /**
  * High-level wrapper around an NMS BlockDisplay entity.
+ *
  * - Renders a BlockDisplay via packets only (not added to the world)
- * - Optionally spawns a packet-only ArmorStand as a click hitbox
+ * - Optionally spawns a packet-only Interaction entity as a click hitbox
  * - Clicks are captured via Netty (ServerboundInteractPacket) and routed to onClick(...)
  */
 public class BlockDisplayNode {
@@ -31,7 +32,7 @@ public class BlockDisplayNode {
     // Static registries for hitboxes
     // ------------------------------------------------------------------------
 
-    /** Map of hitbox entity id (ArmorStand) -> BlockDisplayNode. */
+    /** Map of hitbox entity id (Interaction) -> BlockDisplayNode. */
     private static final Map<Integer, BlockDisplayNode> NODES_BY_HITBOX_ID =
             new ConcurrentHashMap<>();
 
@@ -50,7 +51,7 @@ public class BlockDisplayNode {
     /** Packet-only BlockDisplay entity id. */
     private int displayEntityId = -1;
 
-    /** Packet-only hitbox entity id (ArmorStand), or -1 if none. */
+    /** Packet-only hitbox entity id (Interaction), or -1 if none. */
     private int hitboxEntityId = -1;
 
     /** Optional click handler. */
@@ -58,6 +59,12 @@ public class BlockDisplayNode {
 
     /** Optional hover handler (not triggered yet, reserved for future use). */
     private Consumer<ClickContext> hoverHandler;
+
+    /** The server-side BlockDisplay instance we re-use for updates (packet-only). */
+    private Display.BlockDisplay displayEntity;
+
+    /** The server-side Interaction instance we re-use for updates (packet-only). */
+    private Interaction hitboxEntity;
 
     // ------------------------------------------------------------------------
     // Fluent configuration API
@@ -68,7 +75,7 @@ public class BlockDisplayNode {
         return this;
     }
 
-    /** Convenience: uniform scale in all directions. */
+    /** Convenience: uniform scale in all directions (world-space size of the rendered block). */
     public BlockDisplayNode size(float size) {
         this.scale = new Vector3f(size, size, size);
         return this;
@@ -104,7 +111,7 @@ public class BlockDisplayNode {
     }
 
     /**
-     * Register a click handler. When set, a packet-only hitbox entity is spawned
+     * Register a click handler. When set, a packet-only Interaction hitbox entity is spawned
      * and click packets are routed via Netty to this handler.
      */
     public BlockDisplayNode onClick(Consumer<ClickContext> handler) {
@@ -116,6 +123,7 @@ public class BlockDisplayNode {
      * Register a hover handler placeholder.
      * NOTE: not triggered yet – reserved for ray-trace/hover implementation.
      */
+    @Deprecated
     public BlockDisplayNode onHover(Consumer<ClickContext> handler) {
         this.hoverHandler = handler;
         return this;
@@ -151,19 +159,21 @@ public class BlockDisplayNode {
 
     /**
      * Spawn this BlockDisplay visually via packets and, if needed, a hitbox
-     * entity for click/hover interactions.
+     * Interaction entity for click/hover interactions.
      */
     public void spawn(Collection<Player> players) {
         Display.BlockDisplay nmsDisplay = createDisplayNmsEntity();
         if (nmsDisplay == null) return;
 
+        this.displayEntity = nmsDisplay;
         this.displayEntityId = nmsDisplay.getId();
         DisplayPackets.spawn(nmsDisplay, players);
 
         // If any interaction handler is present, spawn a hitbox entity
         if (clickHandler != null || hoverHandler != null) {
-            ArmorStand nmsHitbox = createHitboxNmsEntity();
+            Interaction nmsHitbox = createHitboxNmsEntity();
             if (nmsHitbox != null) {
+                this.hitboxEntity = nmsHitbox;
                 this.hitboxEntityId = nmsHitbox.getId();
                 NODES_BY_HITBOX_ID.put(this.hitboxEntityId, this);
                 DisplayPackets.spawn(nmsHitbox, players);
@@ -173,7 +183,7 @@ public class BlockDisplayNode {
 
     /**
      * Despawn both the BlockDisplay and the hitbox entity via packets
-     * and cleanup static mappings.
+     * and cleanup static mappings + cached instances.
      */
     public void despawn(Collection<Player> players) {
         if (displayEntityId != -1) {
@@ -186,14 +196,38 @@ public class BlockDisplayNode {
             NODES_BY_HITBOX_ID.remove(hitboxEntityId);
             hitboxEntityId = -1;
         }
+
+        this.displayEntity = null;
+        this.hitboxEntity = null;
     }
 
     /**
-     * Simple "update" strategy: despawn then respawn with the new state.
+     * Instant update without interpolation (snap to new state).
      */
     public void update(Collection<Player> players) {
-        despawn(players);
-        spawn(players);
+        update(players, 0);
+    }
+
+    /**
+     * Update the existing BlockDisplay using built-in interpolation.
+     *
+     * @param interpolationDurationTicks number of ticks the client should interpolate between old and new state
+     */
+    public void update(Collection<Player> players, int interpolationDurationTicks) {
+        if (players == null || players.isEmpty()) return;
+
+        // If somehow the entity is gone, fall back to full respawn
+        if (displayEntityId == -1 || displayEntity == null) {
+            despawn(players);
+            spawn(players);
+            return;
+        }
+
+        // Apply our high-level state to the existing NMS entity
+        applySettingsToDisplay(displayEntity, interpolationDurationTicks);
+
+        // Send metadata/transform updates to viewers
+        DisplayPackets.update(displayEntity, players);
     }
 
     // ------------------------------------------------------------------------
@@ -212,7 +246,20 @@ public class BlockDisplayNode {
         Display.BlockDisplay nmsDisplay =
                 new Display.BlockDisplay(EntityType.BLOCK_DISPLAY, nmsWorld);
 
-        // World position (pivot in world space)
+        // Initial configuration (no interpolation on initial spawn)
+        applySettingsToDisplay(nmsDisplay, 0);
+        return nmsDisplay;
+    }
+
+    /**
+     * Apply current BlockDisplayNode state to an existing NMS BlockDisplay.
+     * Used for both initial spawn and later updates.
+     */
+    private void applySettingsToDisplay(Display.BlockDisplay nmsDisplay, int interpolationDurationTicks) {
+        if (location == null || location.getWorld() == null) return;
+        if (material == null || !material.isBlock()) return;
+
+        // World position
         nmsDisplay.setPos(location.getX(), location.getY(), location.getZ());
 
         // Blockstate from Material
@@ -252,33 +299,56 @@ public class BlockDisplayNode {
             bukkitDisplay.setGlowColorOverride(glowColor);
         }
 
-        return nmsDisplay;
+        // Built-in interpolation (1.20+ Display API)
+        if (interpolationDurationTicks > 0) {
+
+            nmsDisplay.setTransformationInterpolationDuration(interpolationDurationTicks);
+            nmsDisplay.setTransformationInterpolationDelay(0);
+        } else {
+            // 0 duration disables interpolation
+            nmsDisplay.setTransformationInterpolationDuration(0);
+            nmsDisplay.setTransformationInterpolationDelay(0);
+        }
     }
 
     // ------------------------------------------------------------------------
-    // NMS construction for hitbox (ArmorStand), packet-only
+    // NMS construction for hitbox (Interaction), packet-only
     // ------------------------------------------------------------------------
 
     /**
-     * Build a packet-only ArmorStand to act as a click hitbox.
+     * Build a packet-only Interaction entity to act as a click hitbox.
      * The client will see it as an entity (for raytracing) but we never
-     * register it in the world server-side.
+     * register it in the world server-side – only via packets.
+     *
+     * The hitbox size is derived from the BlockDisplay scale to avoid
+     * overlapping hitboxes and mis-clicks.
      */
-    private ArmorStand createHitboxNmsEntity() {
+    private Interaction createHitboxNmsEntity() {
         if (location == null || location.getWorld() == null) return null;
 
         ServerLevel nmsWorld = ((CraftWorld) location.getWorld()).getHandle();
 
-        ArmorStand armorStand = new ArmorStand(nmsWorld, location.getX(), location.getY(), location.getZ());
-        armorStand.setInvisible(true);
-        armorStand.setNoBasePlate(true);
-        armorStand.setNoGravity(true);
-        armorStand.setSmall(true);
+        float width  = Math.max(0.1f, scale.x);
+        float height = Math.max(0.1f, scale.y);
 
-        // NOTE: Do NOT set Marker(true) here, because that makes the bounding box 0
-        // and the client can't click it anymore. Small + invisible is good enough.
+        Interaction hitbox = new Interaction(EntityType.INTERACTION, nmsWorld);
 
-        return armorStand;
+        // Interaction-BB geht typischerweise von (x, y, z) nach oben.
+        // Wir wollen, dass der Mittelpunkt der BB bei der Display-Mitte liegt.
+        double x = location.getX();
+        double y = location.getY() - (height / 2.0f); // center on display
+        double z = location.getZ();
+
+        hitbox.setPos(x, y, z);
+
+        // je nach NMS-Version ggf. setWidth/setHeight statt setInteractionWidth/Height
+        hitbox.setWidth(width);
+        hitbox.setHeight(height);
+
+        hitbox.setInvulnerable(true);
+        hitbox.noPhysics = true;
+
+        return hitbox;
     }
 
     // ------------------------------------------------------------------------
@@ -298,5 +368,28 @@ public class BlockDisplayNode {
         }
         // hoverHandler could be triggered here for more complex logic if desired
     }
+
+    // ------------------------------------------------------------------------
+    // Simple context object for click callbacks
+    // ------------------------------------------------------------------------
+
+    public static final class ClickContext {
+        private final Player player;
+        private final BlockDisplayNode node;
+
+        public ClickContext(Player player, BlockDisplayNode node) {
+            this.player = player;
+            this.node = node;
+        }
+
+        public Player player() {
+            return player;
+        }
+
+        public BlockDisplayNode node() {
+            return node;
+        }
+    }
 }
+
 

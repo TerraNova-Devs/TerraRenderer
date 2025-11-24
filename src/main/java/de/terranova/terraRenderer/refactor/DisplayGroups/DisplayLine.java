@@ -19,22 +19,21 @@ public class DisplayLine extends DisplayGroup {
     private Location start;
     private Location end;
     private float thickness;
-    private Material material;
-    private Color glowColor;
-    private boolean glowing;
+    private final Material material;
+    private final int glow;
+    private final boolean glowing;
 
     public DisplayLine(Location start, Location end,
                        float thickness,
                        Material material,
                        boolean glowing,
-                       Color glowColor) {
+                       int glow) {
         this.start = start == null ? null : start.clone();
         this.end = end == null ? null : end.clone();
         this.thickness = thickness;
         this.material = material;
-        this.glowColor = glowColor;
+        this.glow = glow;
         this.glowing = glowing;
-
         buildNode();
     }
 
@@ -63,8 +62,8 @@ public class DisplayLine extends DisplayGroup {
                 .location(mid)
                 .scale(scale)
                 .rotationEulerDeg(rotationEuler)
-                .material(material)
-                .glow(glowColor.asRGB());
+                .material(material);
+        if(glowing) node.glow(glow);
         add(node);
     }
 

@@ -1,5 +1,6 @@
 package de.terranova.terraRenderer;
 
+import de.terranova.terraRenderer.refactor.Listener.BreezeToolListener;
 import de.terranova.terraRenderer.refactor.Listener.DisplayPacketListener;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
@@ -13,6 +14,7 @@ public final class TerraRenderer extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new WorldeditEventListener(this), this);
         getServer().getPluginManager().registerEvents(new DisplayPacketListener(), this);
         // /debug -> DebugCommand
+        Bukkit.getPluginManager().registerEvents(new BreezeToolListener(this), this);
         PluginCommand debug = getCommand("debug");
         if (debug != null) {
             debug.setExecutor(new DebugCommand(this));

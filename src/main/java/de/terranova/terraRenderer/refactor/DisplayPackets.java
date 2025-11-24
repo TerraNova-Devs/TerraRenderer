@@ -69,4 +69,28 @@ public final class DisplayPackets {
             handle.connection.send(removePacket);
         }
     }
+
+    /**
+     * Sends a metadata update for an existing packet-only entity.
+     * For Display entities this includes transformation + interpolation settings.
+     *
+     * IMPORTANT: we do NOT send a teleport here, so the client's built-in
+     * interpolation can smoothly animate between old and new transforms.
+     */
+    public static void update(Entity nmsEntity, Collection<Player> players) {
+        if (nmsEntity == null || players == null || players.isEmpty()) return;
+
+        var dataItems = nmsEntity.getEntityData().packAll();
+        if (dataItems == null || dataItems.isEmpty()) return;
+
+        ClientboundSetEntityDataPacket dataPacket =
+                new ClientboundSetEntityDataPacket(nmsEntity.getId(), dataItems);
+
+        for (Player p : players) {
+            if (p == null || !p.isOnline()) continue;
+
+            var handle = ((CraftPlayer) p).getHandle();
+            handle.connection.send(dataPacket);
+        }
+    }
 }

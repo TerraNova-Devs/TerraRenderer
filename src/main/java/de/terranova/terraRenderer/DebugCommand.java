@@ -34,7 +34,10 @@ public class DebugCommand implements CommandExecutor {
                 .scale(scale)
                 .rotationEulerDeg(new Vector3f(0f,0f,0f))
                 .material(Material.LIGHT_BLUE_CONCRETE)
-                .onClick((ctx) -> ctx.player().sendMessage("Du Stinkst"))
+                .onClick((ctx) -> {
+                    ctx.node().material(Material.RED_CONCRETE);
+                    ctx.node().update(List.of(ctx.player()));
+                })
                 .glow(0x020202);
         node.spawn(List.of(p));
 
@@ -49,7 +52,7 @@ public class DebugCommand implements CommandExecutor {
                     thickness,
                     Material.WHITE_CONCRETE,
                     true,
-                    Color.AQUA      // or any line glow you want
+                    0xAA2288     // or any line glow you want
             );
             line.spawn(List.of(p));
         }
