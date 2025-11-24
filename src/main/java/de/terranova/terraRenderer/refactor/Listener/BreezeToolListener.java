@@ -34,7 +34,7 @@ public class BreezeToolListener implements Listener {
     // Per-player region in *block* coordinates
     private final Map<UUID, RegionSelection> activeRegions = new HashMap<>();
 
-    // How many ticks the Display should interpolate when extending the region (for corners)
+    // How many ticks the Display should interpolate when extending the region
     private static final int INTERPOLATION_TICKS = 10;
 
     public BreezeToolListener(JavaPlugin plugin) {
@@ -114,7 +114,7 @@ public class BreezeToolListener implements Listener {
             // If nothing changed, do nothing
             if (!changed) return;
 
-            // Only corners interpolate when we actually extended an existing region
+            // Only interpolate when we actually extended an existing region
             boolean interpolate = extendedExisting;
             renderOrUpdateSelection(player, region, interpolate);
         }
@@ -272,8 +272,10 @@ public class BreezeToolListener implements Listener {
             cube.spawn(viewers);
             activeCubes.put(uuid, cube);
         } else {
-            // Update existing cube WITHOUT interpolation to avoid "breathing" effect
-            cube.update(cubeFrom, cubeTo, viewers, 0);
+            // Update existing cube.
+            // You need to implement something like this on DisplayCube:
+            //   public void update(Location from, Location to, Collection<Player> viewers, int interpolationTicks)
+            cube.update(cubeFrom, cubeTo, viewers, interpTicks);
         }
 
         // --- MARKERS ---
@@ -306,14 +308,8 @@ public class BreezeToolListener implements Listener {
                 if (node == null || loc == null) continue;
 
                 node.location(loc);
-
-                if (interpolate) {
-                    node.update(viewers, INTERPOLATION_TICKS);
-                } else {
-                    node.update(viewers, 0);
-                }
+                node.update(viewers, interpTicks);
             }
-
         }
     }
 
